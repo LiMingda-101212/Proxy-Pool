@@ -1,0 +1,38 @@
+name: Proxy Crawler
+
+on:
+  schedule:
+    - cron: '0 2 */2 * *'  # 每两天UTC时间2:00运行
+  workflow_dispatch:  # 允许手动触发
+
+jobs:
+  crawl-proxies:
+    runs-on: ubuntu-latest
+    timeout-minutes: 240  # 超时
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.10'
+        
+    - name: Install dependencies
+      run: |
+        cd proxy-pool
+        pip install -i https://mirrors.aliyun.com/pypi/web/simple requests aiohttp
+        
+    - name: Run proxy crawler
+      run: |
+        cd proxy-pool
+        python proxy-pool.py
+      
+    - name: Commit updated proxies
+      run: |
+        git config --local user.email "action@github.com"
+        git config --local user.name "GitHub Action"
+        git add proxy-pool/proxies.csv
+        git commit -m "🤖 Update proxy list - $(date +'%Y-%m-%d %H:%M')" || exit 0
+        git push
