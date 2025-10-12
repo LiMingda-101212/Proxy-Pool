@@ -2,13 +2,17 @@ name: Proxy Crawler
 
 on:
   schedule:
-    - cron: '0 2 */2 * *'  # 每两天UTC时间2:00运行
-  workflow_dispatch:        # 允许手动触发
+    - cron: '0 2 */2 * *'
+  workflow_dispatch:
 
 jobs:
   crawl-proxies:
     runs-on: ubuntu-latest
     timeout-minutes: 180
+    
+    # 显式声明权限
+    permissions:
+      contents: write  # 授予写入权限
     
     steps:
     - name: Checkout code
@@ -26,25 +30,11 @@ jobs:
         cd proxy-pool
         python proxy-pool.py
       
-    - name: Commit and push proxy updates
-      run: |
-        # 配置 Git 用户信息
-        git config --global user.name "github-actions[bot]"
-        git config --global user.email "github-actions[bot]@users.noreply.github.com"
-        
-        # 添加代理文件
-        git add proxy-pool/proxies.csv
-        
-        # 检查是否有变更需要提交
-        if git diff --staged --quiet; then
-          echo "没有代理更新，跳过提交"
-          exit 0
-        fi
-        
-        # 提交变更
-        git commit -m "🤖 Update proxy list - $(date +'%Y-%m-%d %H:%M')"
-        
-        # 使用 token 进行推送
-        git push https://${{ github.actor }}:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git HEAD:main
-        
-        echo "✅ 代理列表已成功更新并提交到仓库"
+    - name: Auto-commit proxy updates
+      uses: stefanzweifel/git-auto-commit-action@v4
+      with:
+        repository: .
+        file_pattern: 'proxy-pool/proxies.csv'
+        commit_message: '🤖 Update proxy list'
+        commit_user_name: 'GitHub Actions'
+        commit_user_email: 'actions@github.com'
