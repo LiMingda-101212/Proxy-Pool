@@ -2,17 +2,15 @@ name: Proxy Crawler
 
 on:
   schedule:
-    - cron: '0 2 */2 * *'
+    - cron: '0 2 * * *'  # 每天UTC时间2:00运行
   workflow_dispatch:
 
 jobs:
   crawl-proxies:
     runs-on: ubuntu-latest
     timeout-minutes: 240
-    
-    # 显式声明权限
     permissions:
-      contents: write  # 授予写入权限
+      contents: write
     
     steps:
     - name: Checkout code
@@ -25,10 +23,12 @@ jobs:
       with:
         python-version: '3.10'
         
-    - name: Install dependencies
+    - name: Install dependencies with PySocks
       run: |
         cd proxy-pool
         pip install -i https://pypi.tuna.tsinghua.edu.cn/simple/ requests aiohttp PySocks
+        # 验证安装
+        python -c "import socks; print('✅ PySocks 安装成功，SOCKS代理支持已启用')"
         
     - name: Run proxy crawler
       run: |
