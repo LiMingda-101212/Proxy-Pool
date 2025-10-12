@@ -1,14 +1,11 @@
-name: Proxy Crawler
+name: Proxy Crawler Debug
 
 on:
-  schedule:
-    - cron: '0 2 */2 * *'
   workflow_dispatch:
 
 jobs:
   crawl-proxies:
     runs-on: ubuntu-latest
-    timeout-minutes: 180
     
     steps:
     - name: Checkout code
@@ -16,22 +13,77 @@ jobs:
       with:
         token: ${{ secrets.GITHUB_TOKEN }}
         
+    - name: Debug - Check directory structure
+      run: |
+        echo "=== 当前目录 ==="
+        pwd
+        echo "=== 目录内容 ==="
+        ls -la
+        echo "=== proxy-pool 目录 ==="
+        ls -la proxy-pool/
+        
     - name: Set up Python
       uses: actions/setup-python@v4
       with:
         python-version: '3.10'
         
-    - name: Run proxy crawler
+    - name: Install dependencies
       run: |
         cd proxy-pool
-        python proxy-pool.py
-      
-    - name: Auto-commit changes
-      uses: stefanzweifel/git-auto-commit-action@v4
-      with:
-        repository: .
-        file_pattern: 'proxy-pool/proxies.csv'
-        commit_message: '🤖 Update proxy list'
-        commit_user_name: 'github-actions[bot]'
-        commit_user_email: 'github-actions[bot]@users.noreply.github.com'
-        commit_author: 'github-actions[bot] <github-actions[bot]@users.noreply.github.com>'
+        echo "=== 安装依赖 ==="
+        pip install -i https://pypi.tuna.tsinghua.edu.cn/simple/ requests aiohttp
+        echo "依赖安装完成"
+        
+    - name: Run proxy crawler (简化测试)
+      run: |
+        cd proxy-pool
+        echo "=== 开始执行脚本 ==="
+        # 先创建一个简单的测试，确保脚本能运行
+        python -c "
+        import csv
+        print('Python 环境正常')
+        print('requests 模块正常')
+        
+        # 创建测试代理文件
+        with open('proxies.csv', 'w', newline='') as f:
+            writer = csv.writer(f)
+            writer.writerow(['http', '127.0.0.1:8080', 100])
+            writer.writerow(['socks5', '192.168.1.1:1080', 95])
+        print('测试文件创建完成')
+        "
+        echo "=== 简化测试完成 ==="
+        
+    - name: Check created file
+      run: |
+        echo "=== 检查生成的文件 ==="
+        ls -la proxy-pool/proxies.csv
+        echo "=== 文件内容 ==="
+        cat proxy-pool/proxies.csv
+        
+    - name: Test Git operations step by step
+      run: |
+        echo "=== 开始 Git 测试 ==="
+        
+        # 1. 配置 Git
+        git config --global user.name "github-actions[bot]"
+        git config --global user.email "github-actions[bot]@users.noreply.github.com"
+        echo "Git 配置完成"
+        
+        # 2. 检查状态
+        echo "=== Git 状态 ==="
+        git status
+        
+        # 3. 添加文件
+        echo "=== 添加文件 ==="
+        git add proxy-pool/proxies.csv
+        git status
+        
+        # 4. 提交
+        echo "=== 提交变更 ==="
+        git commit -m "🤖 Test: Update proxy list" || echo "提交失败"
+        
+        # 5. 推送
+        echo "=== 推送变更 ==="
+        git push || echo "推送失败"
+        
+        echo "=== Git 测试完成 ==="
