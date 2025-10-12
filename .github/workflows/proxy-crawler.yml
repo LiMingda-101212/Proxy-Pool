@@ -26,30 +26,12 @@ jobs:
         cd proxy-pool
         python proxy-pool.py
       
-    - name: Configure Git
-      run: |
-        git config --global user.email "action@github.com"
-        git config --global user.name "GitHub Action"
-      
-    - name: Commit and push changes
-      run: |
-        # 检查是否有文件变更
-        if git diff --quiet; then
-          echo "没有文件变更，跳过提交"
-          exit 0
-        fi
-        
-        # 添加所有变更
-        git add -A
-        
-        # 提交变更
-        git commit -m "🤖 Update proxy list - $(date +'%Y-%m-%d %H:%M')"
-        
-        # 拉取最新变更（避免冲突）
-        git pull --rebase origin main
-        
-        # 推送变更
-        git push origin main
-      env:
-        # 使用 GITHUB_TOKEN 进行认证
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    - name: Auto-commit changes
+      uses: stefanzweifel/git-auto-commit-action@v4
+      with:
+        repository: .
+        file_pattern: 'proxy-pool/proxies.csv'
+        commit_message: '🤖 Update proxy list'
+        commit_user_name: 'github-actions[bot]'
+        commit_user_email: 'github-actions[bot]@users.noreply.github.com'
+        commit_author: 'github-actions[bot] <github-actions[bot]@users.noreply.github.com>'
