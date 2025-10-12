@@ -2,33 +2,54 @@ name: Proxy Crawler
 
 on:
   schedule:
-    - cron: '0 2 */2 * *'  # 每两天UTC时间2:00运行
-  workflow_dispatch:  # 允许手动触发
+    - cron: '0 2 */2 * *'
+  workflow_dispatch:
 
 jobs:
   crawl-proxies:
     runs-on: ubuntu-latest
-    timeout-minutes: 240  # 超时
+    timeout-minutes: 180
     
     steps:
     - name: Checkout code
       uses: actions/checkout@v4
-      
+      with:
+        token: ${{ secrets.GITHUB_TOKEN }}
+        
     - name: Set up Python
       uses: actions/setup-python@v4
       with:
         python-version: '3.10'
-             
+        
     - name: Run proxy crawler
       run: |
         cd proxy-pool
         python proxy-pool.py
       
-    - name: Commit updated proxies
+    - name: Configure Git
       run: |
-        cd proxy-pool
-        git config --local user.email "action@github.com"
-        git config --local user.name "GitHub Action"
-        git add proxies.csv
-        git commit -m "🤖 Update proxy list - $(date +'%Y-%m-%d %H:%M')" || exit 0
-        git push
+        git config --global user.email "action@github.com"
+        git config --global user.name "GitHub Action"
+      
+    - name: Commit and push changes
+      run: |
+        # 检查是否有文件变更
+        if git diff --quiet; then
+          echo "没有文件变更，跳过提交"
+          exit 0
+        fi
+        
+        # 添加所有变更
+        git add -A
+        
+        # 提交变更
+        git commit -m "🤖 Update proxy list - $(date +'%Y-%m-%d %H:%M')"
+        
+        # 拉取最新变更（避免冲突）
+        git pull --rebase origin main
+        
+        # 推送变更
+        git push origin main
+      env:
+        # 使用 GITHUB_TOKEN 进行认证
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
