@@ -28,7 +28,7 @@ jobs:
     - name: Install dependencies
       run: |
         cd proxy-pool
-        pip install -i https://pypi.tuna.tsinghua.edu.cn/simple/ requests aiohttp
+        pip install -i https://pypi.tuna.tsinghua.edu.cn/simple/ requests aiohttp PySocks
         
     - name: Run proxy crawler
       run: |
