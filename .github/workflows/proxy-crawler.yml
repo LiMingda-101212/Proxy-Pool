@@ -23,12 +23,12 @@ jobs:
       with:
         python-version: '3.10'
         
-    - name: Install dependencies with PySocks
+    - name: Install dependencies
       run: |
         cd proxy-pool
         pip install -i https://pypi.tuna.tsinghua.edu.cn/simple/ requests aiohttp PySocks
         # 验证安装
-        python -c "import socks; print('✅ PySocks 安装成功，SOCKS代理支持已启用')"
+        python -c "import socks; print('PySocks 安装成功，SOCKS代理支持已启用')"
         
     - name: Run proxy crawler
       run: |
