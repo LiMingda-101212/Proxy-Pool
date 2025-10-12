@@ -31,7 +31,7 @@ jobs:
       run: |
         cd proxy-pool
         echo "=== 安装依赖 ==="
-        pip install -i https://pypi.tuna.tsinghua.edu.cn/simple/ requests aiohttp
+
         echo "依赖安装完成"
         
     - name: Run proxy crawler (简化测试)
@@ -42,7 +42,7 @@ jobs:
         python -c "
         import csv
         print('Python 环境正常')
-        print('requests 模块正常')
+        
         
         # 创建测试代理文件
         with open('proxies.csv', 'w', newline='') as f:
