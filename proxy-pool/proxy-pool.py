@@ -395,7 +395,7 @@ def main(scraper_choice):
     # https://github.com/databay-labs/free-proxy-list/raw/refs/heads/master/https.txt -> https://raw.githubusercontent.com/databay-labs/free-proxy-list/refs/heads/master/https.txt
     elif scraper_choice == '2':
         by_type = 'http'   # 默认用http
-        print('\n开始爬取:https://raw.githubusercontent.com/databay-labs/free-proxy-list/refs/heads/master/http.txt')
+        print('开始爬取:https://raw.githubusercontent.com/databay-labs/free-proxy-list/refs/heads/master/http.txt')
         error_count = 0
         url = 'https://raw.githubusercontent.com/databay-labs/free-proxy-list/refs/heads/master/http.txt'
         headers = {
@@ -420,7 +420,7 @@ def main(scraper_choice):
 
     elif scraper_choice == '3':
         by_type = 'socks5'   # 默认用socks5
-        print('\n开始爬取:https://raw.githubusercontent.com/databay-labs/free-proxy-list/refs/heads/master/socks5.txt')
+        print('开始爬取:https://raw.githubusercontent.com/databay-labs/free-proxy-list/refs/heads/master/socks5.txt')
         error_count = 0
         url = 'https://raw.githubusercontent.com/databay-labs/free-proxy-list/refs/heads/master/socks5.txt'
         headers = {
@@ -445,7 +445,7 @@ def main(scraper_choice):
 
     elif scraper_choice == '4':
         by_type = 'http'   # 默认用http
-        print('\n开始爬取:https://raw.githubusercontent.com/databay-labs/free-proxy-list/refs/heads/master/https.txt')
+        print('开始爬取:https://raw.githubusercontent.com/databay-labs/free-proxy-list/refs/heads/master/https.txt')
         error_count = 0
         url = 'https://raw.githubusercontent.com/databay-labs/free-proxy-list/refs/heads/master/https.txt'
         headers = {
@@ -474,7 +474,7 @@ def main(scraper_choice):
     # https://github.com/zloi-user/hideip.me/raw/refs/heads/master/socks5.txt -> https://raw.githubusercontent.com/zloi-user/hideip.me/refs/heads/master/socks5.txt
     elif scraper_choice == '5':
         by_type = 'http'   # 默认用http
-        print('\n开始爬取:https://raw.githubusercontent.com/zloi-user/hideip.me/refs/heads/master/http.txt')
+        print('开始爬取:https://raw.githubusercontent.com/zloi-user/hideip.me/refs/heads/master/http.txt')
         error_count = 0
         url = 'https://raw.githubusercontent.com/zloi-user/hideip.me/refs/heads/master/http.txt'
         headers = {
@@ -499,7 +499,7 @@ def main(scraper_choice):
 
     elif scraper_choice == '6':
         by_type = 'http'   # 默认用http
-        print('\n开始爬取:https://raw.githubusercontent.com/zloi-user/hideip.me/refs/heads/master/https.txt')
+        print('开始爬取:https://raw.githubusercontent.com/zloi-user/hideip.me/refs/heads/master/https.txt')
         error_count = 0
         url = 'https://raw.githubusercontent.com/zloi-user/hideip.me/refs/heads/master/https.txt'
         headers = {
@@ -524,7 +524,7 @@ def main(scraper_choice):
 
     elif scraper_choice == '7':
         by_type = 'socks4'
-        print('\n开始爬取:https://raw.githubusercontent.com/zloi-user/hideip.me/refs/heads/master/socks4.txt')
+        print('开始爬取:https://raw.githubusercontent.com/zloi-user/hideip.me/refs/heads/master/socks4.txt')
         error_count = 0
         url = 'https://raw.githubusercontent.com/zloi-user/hideip.me/refs/heads/master/socks4.txt'
         headers = {
@@ -549,7 +549,7 @@ def main(scraper_choice):
 
     elif scraper_choice == '8':
         by_type = 'socks5'
-        print('\n开始爬取:https://raw.githubusercontent.com/zloi-user/hideip.me/refs/heads/master/socks5.txt')
+        print('开始爬取:https://raw.githubusercontent.com/zloi-user/hideip.me/refs/heads/master/socks5.txt')
         error_count = 0
         url = 'https://raw.githubusercontent.com/zloi-user/hideip.me/refs/heads/master/socks5.txt'
         headers = {
@@ -572,62 +572,11 @@ def main(scraper_choice):
         except Exception as e:
             print(f'爬取失败: {str(e)}')
 
-    # https://raw.githubusercontent.com/r00tee/Proxy-List/main/Https.txt
-    # https://raw.githubusercontent.com/r00tee/Proxy-List/main/Socks4.txt
     # https://raw.githubusercontent.com/r00tee/Proxy-List/main/Socks5.txt
+      
     elif scraper_choice == '9':
-        by_type = 'http'   # 默认用http
-        print('\n开始爬取:https://raw.githubusercontent.com/r00tee/Proxy-List/main/Https.txt')
-        error_count = 0
-        url = 'https://raw.githubusercontent.com/r00tee/Proxy-List/main/Https.txt'
-        headers = {
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/58.0.3029.110 Safari/537.3"
-        }
-        try:
-            response = requests.get(url,headers=headers)
-            result = response.text.split("\n")
-            proxy_list = []
-            for proxy in result:
-                if len(result) == 0:
-                    print('没有代理可以爬取')
-                else:
-                    proxy_list.append(proxy.strip())
-            if isinstance(proxy_list, list):
-                all_proxies.extend(proxy_list)
-            else:
-                error_count += 1
-            print(f'1/1  错误数:{error_count}')
-        except Exception as e:
-            print(f'爬取失败: {str(e)}')
-    
-    elif scraper_choice == '10':
-        by_type = 'socks4'   # 默认用http
-        print('\n开始爬取:https://raw.githubusercontent.com/r00tee/Proxy-List/main/Socks4.txt')
-        error_count = 0
-        url = 'https://raw.githubusercontent.com/r00tee/Proxy-List/main/Socks4.txt'
-        headers = {
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/58.0.3029.110 Safari/537.3"
-        }
-        try:
-            response = requests.get(url,headers=headers)
-            result = response.text.split("\n")
-            proxy_list = []
-            for proxy in result:
-                if len(result) == 0:
-                    print('没有代理可以爬取')
-                else:
-                    proxy_list.append(proxy.strip())
-            if isinstance(proxy_list, list):
-                all_proxies.extend(proxy_list)
-            else:
-                error_count += 1
-            print(f'1/1  错误数:{error_count}')
-        except Exception as e:
-            print(f'爬取失败: {str(e)}')
-    
-    elif scraper_choice == '11':
-        by_type = 'socks5'   # 默认用http
-        print('\n开始爬取:https://raw.githubusercontent.com/r00tee/Proxy-List/main/Socks5.txt')
+        by_type = 'socks5'
+        print('开始爬取:https://raw.githubusercontent.com/r00tee/Proxy-List/main/Socks5.txt')
         error_count = 0
         url = 'https://raw.githubusercontent.com/r00tee/Proxy-List/main/Socks5.txt'
         headers = {
@@ -664,7 +613,7 @@ if __name__ == '__main__':
     print("=== 开始代理爬取和验证流程 ===")
     
     
-    for i in range(1,11+1):
+    for i in range(1,9+1):
         # 1. 爬取新代理
         new_proxies,by_type = main(scraper_choice=str(i))
 
