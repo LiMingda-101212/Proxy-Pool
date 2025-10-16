@@ -25,21 +25,19 @@ jobs:
         
     - name: Install dependencies
       run: |
-        cd proxy-pool
         pip install -i https://pypi.tuna.tsinghua.edu.cn/simple/ requests aiohttp PySocks
         # 验证安装
         python -c "import socks; print('PySocks 安装成功，SOCKS代理支持已启用')"
         
     - name: Run proxy crawler
       run: |
-        cd proxy-pool
-        python proxy-pool.py
+        python ProxyPool.py
       
     - name: Auto-commit proxy updates
       uses: stefanzweifel/git-auto-commit-action@v4
       with:
         repository: .
-        file_pattern: 'proxy-pool/proxies.csv'
+        file_pattern: 'proxies.csv'
         commit_message: '🤖 Update proxy list'
         commit_user_name: 'GitHub Actions'
         commit_user_email: 'actions@github.com'
