@@ -9,13 +9,15 @@ import csv
 OUTPUT_FILE = "proxies.csv"  # 输出有效代理文件
 TEST_URL_CN = "http://www.baidu.com"  # 国内测试URL
 TEST_URL_INTL = "http://www.google.com"  # 国际测试URL
+TRANSPARENT_CHECK_URL = "http://httpbin.org/ip"  # 透明代理检测URL
 TIMEOUT_CN = 6  # 国内测试超时时间(秒)
 TIMEOUT_INTL = 10  # 国际测试超时时间(秒)
+TRANSPARENT_TIMEOUT = 8  # 透明代理检测超时时间(秒)
 MAX_WORKERS = 50  # 最大并发数
 MAX_SCORE = 100  # 最大积分
 
 class ProxyScraper:
-    """代理爬取器"""
+    """通用代理爬取器 - 适合一些需解析的网站"""
     def __init__(self, url: str, regex_pattern: str, capture_groups: list):
         self.url = url
         self.headers = {
@@ -46,6 +48,74 @@ class ProxyScraper:
         except Exception as e:
             print(f"爬取失败，错误: {str(e)}")
             return []
+
+def get_own_ip():
+    """获取自己的公网IP地址"""
+    try:
+        response = requests.get(TRANSPARENT_CHECK_URL, timeout=TRANSPARENT_TIMEOUT)
+        if response.status_code == 200:
+            return response.json()['origin']
+    except Exception as e:
+        print(f"获取本机IP失败: {str(e)}")
+    return None
+
+def check_transparent_proxy(proxy, proxy_type="http", own_ip=None):
+    """
+    检测代理是否为透明代理
+    
+    :param proxy: 代理地址
+    :param proxy_type: 代理类型
+    :param own_ip: 自己的公网IP（可选）
+    :return: (是否为透明代理, 检测到的IP)
+    """
+    if own_ip is None:
+        own_ip = get_own_ip()
+        if own_ip is None:
+            return False, "unknown"  # 无法获取本机IP，跳过透明代理检测
+    
+    try:
+        # 设置代理
+        if proxy_type == "http":
+            proxies_config = {
+                "http": f"http://{proxy}",
+                "https": f"http://{proxy}"
+            }
+        elif proxy_type == "socks4":
+            proxies_config = {
+                "http": f"socks4://{proxy}",
+                "https": f"socks4://{proxy}"
+            }
+        elif proxy_type == "socks5":
+            proxies_config = {
+                "http": f"socks5://{proxy}",
+                "https": f"socks5://{proxy}"
+            }
+        else:
+            proxies_config = {
+                "http": f"http://{proxy}",
+                "https": f"http://{proxy}"
+            }
+        
+        # 使用代理访问检测网站
+        response = requests.get(
+            TRANSPARENT_CHECK_URL,
+            proxies=proxies_config,
+            timeout=TRANSPARENT_TIMEOUT
+        )
+        
+        if response.status_code == 200:
+            proxy_ip_data = response.json()
+            proxy_ip = proxy_ip_data['origin']
+            
+            # 判断是否为透明代理：如果返回的IP包含真实IP，则为透明代理
+            is_transparent = own_ip in proxy_ip
+            
+            return is_transparent, proxy_ip
+        else:
+            return False, "unknown"
+            
+    except Exception as e:
+        return False, "unknown"
 
 def check_proxy_single(proxy, test_url, timeout=TIMEOUT_CN, 
                       retries=1, proxy_type="auto"):
@@ -110,9 +180,9 @@ def check_proxy_single(proxy, test_url, timeout=TIMEOUT_CN,
 
 def check_proxy_dual(proxy, proxy_type="auto"):
     """
-    双重验证代理：同时验证百度(国内)和Google(国际)
+    双重验证代理：同时验证百度(国内)和Google(国际)，并进行透明代理检测
     
-    :return: (是否通过国内, 是否通过国际, 最终检测类型)
+    :return: (是否通过国内, 是否通过国际, 最终检测类型, 是否为透明代理, 检测到的IP)
     """
     # 验证国内网站
     cn_success, cn_response_time, detected_type_cn = check_proxy_single(
@@ -129,21 +199,35 @@ def check_proxy_dual(proxy, proxy_type="auto"):
     if final_type == "unknown":
         final_type = proxy_type if proxy_type != "auto" else "http"
     
-    return cn_success, intl_success, final_type
+    # 透明代理检测（只在代理有效时进行）
+    is_transparent = False
+    detected_ip = "unknown"
+    
+    if cn_success or intl_success:
+        is_transparent, detected_ip = check_transparent_proxy(proxy, final_type)
+    
+    return cn_success, intl_success, final_type, is_transparent, detected_ip
 
 def check_proxies_batch(proxies, proxy_types, max_workers=MAX_WORKERS, check_type="new"):
     """
-    批量检查代理IP列表（双重验证）
+    批量检查代理IP列表（双重验证 + 透明代理检测）
     """
     updated_proxies = {}
     updated_types = {}
     updated_china = {}
     updated_international = {}
+    updated_transparent = {}
+    updated_detected_ips = {}
+
+    # 预先获取本机IP用于透明代理检测
+    own_ip = get_own_ip()
+    if own_ip is None:
+        print("⚠️  无法获取本机IP，跳过透明代理检测")
 
     with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
         future_to_proxy = {}
         for proxy in proxies:
-            # 对于已有代理，使用文件中记录的类型；对于新代理，使用自动检测
+            # 对于已有代理，使用文件中记录的类型；对于新代理，先看有没有指定,否则使用自动检测
             if check_type == "existing" and proxy in proxy_types:
                 proxy_type = proxy_types[proxy]
             else:
@@ -155,7 +239,7 @@ def check_proxies_batch(proxies, proxy_types, max_workers=MAX_WORKERS, check_typ
         for future in concurrent.futures.as_completed(future_to_proxy):
             proxy = future_to_proxy[future]
             try:
-                cn_success, intl_success, detected_type = future.result()
+                cn_success, intl_success, detected_type, is_transparent, detected_ip = future.result()
 
                 # 计算分数和更新逻辑
                 current_score = proxies.get(proxy, 0)
@@ -164,7 +248,9 @@ def check_proxies_batch(proxies, proxy_types, max_workers=MAX_WORKERS, check_typ
                     # 新代理：只要通过任一测试就98分
                     if cn_success or intl_success:
                         updated_proxies[proxy] = 98
-                        print(f"✅ 代理有效({detected_type}): {proxy} | 国内: {'✓' if cn_success else '✗'} 国际: {'✓' if intl_success else '✗'}")
+                        # 透明代理警告
+                        transparent_warning = " ⚠️ 透明代理" if is_transparent else ""
+                        print(f"✅ 代理有效({detected_type}): {proxy} | 国内: {'✓' if cn_success else '✗'} 国际: {'✓' if intl_success else '✗'}{transparent_warning}")
                     else:
                         updated_proxies[proxy] = 0
                         print(f"❌ 代理无效: {proxy}")
@@ -173,12 +259,14 @@ def check_proxies_batch(proxies, proxy_types, max_workers=MAX_WORKERS, check_typ
                     if cn_success and intl_success:
                         # 两次都通过，加2分
                         updated_proxies[proxy] = min(current_score + 2, MAX_SCORE)
-                        print(f"✅ 代理有效({detected_type}): {proxy} | 国内: ✓ 国际: ✓ | 分数: {current_score} -> {updated_proxies[proxy]}")
+                        transparent_warning = " ⚠️ 透明代理" if is_transparent else ""
+                        print(f"✅ 代理有效({detected_type}): {proxy} | 国内: ✓ 国际: ✓ | 分数: {current_score} -> {updated_proxies[proxy]}{transparent_warning}")
                     elif cn_success or intl_success:
                         # 只通过一个，加1分
                         updated_proxies[proxy] = min(current_score + 1, MAX_SCORE)
                         status = "国内: ✓ 国际: ✗" if cn_success else "国内: ✗ 国际: ✓"
-                        print(f"🟡 代理部分有效({detected_type}): {proxy} | {status} | 分数: {current_score} -> {updated_proxies[proxy]}")
+                        transparent_warning = " ⚠️ 透明代理" if is_transparent else ""
+                        print(f"🟡 代理部分有效({detected_type}): {proxy} | {status} | 分数: {current_score} -> {updated_proxies[proxy]}{transparent_warning}")
                     else:
                         # 两个都不通过，减1分
                         updated_proxies[proxy] = max(0, current_score - 1)
@@ -188,6 +276,8 @@ def check_proxies_batch(proxies, proxy_types, max_workers=MAX_WORKERS, check_typ
                 updated_types[proxy] = detected_type
                 updated_china[proxy] = cn_success
                 updated_international[proxy] = intl_success
+                updated_transparent[proxy] = is_transparent
+                updated_detected_ips[proxy] = detected_ip
                         
             except Exception as e:
                 print(f"❌ 错误代理: {proxy} - {str(e)}")
@@ -200,24 +290,53 @@ def check_proxies_batch(proxies, proxy_types, max_workers=MAX_WORKERS, check_typ
                 updated_types[proxy] = proxy_types.get(proxy, "http")
                 updated_china[proxy] = False
                 updated_international[proxy] = False
+                updated_transparent[proxy] = False
+                updated_detected_ips[proxy] = "unknown"
                     
-    return updated_proxies, updated_types, updated_china, updated_international
+    return updated_proxies, updated_types, updated_china, updated_international, updated_transparent, updated_detected_ips
 
 def load_proxies_from_file(file_path):
-    """从CSV文件加载代理列表、类型、分数和支持范围"""
+    """从CSV文件加载代理列表、类型、分数、支持范围和透明代理信息"""
     proxies = {}
     proxy_types = {}
     china_support = {}
     international_support = {}
+    transparent_proxies = {}
+    detected_ips = {}
     
     if not os.path.exists(file_path):
-        return proxies, proxy_types, china_support, international_support
+        return proxies, proxy_types, china_support, international_support, transparent_proxies, detected_ips
 
     with open(file_path, 'r', encoding="utf-8") as file:
         reader = csv.reader(file)
         for row in reader:
-            if len(row) >= 5:
-                # 新格式：类型,proxy:port,分数,China,International
+            if len(row) >= 7:
+                # 新格式：类型,proxy:port,分数,China,International,Transparent,DetectedIP
+                proxy_type = row[0].strip().lower()
+                proxy = row[1].strip()
+                try:
+                    score = int(row[2])
+                    china = row[3].strip().lower() == 'true'
+                    international = row[4].strip().lower() == 'true'
+                    transparent = row[5].strip().lower() == 'true'
+                    detected_ip = row[6].strip() if len(row) > 6 else "unknown"
+                    
+                    proxies[proxy] = score
+                    proxy_types[proxy] = proxy_type
+                    china_support[proxy] = china
+                    international_support[proxy] = international
+                    transparent_proxies[proxy] = transparent
+                    detected_ips[proxy] = detected_ip
+                except:
+                    # 如果解析失败，使用默认值
+                    proxies[proxy] = 70
+                    proxy_types[proxy] = "http"
+                    china_support[proxy] = False
+                    international_support[proxy] = False
+                    transparent_proxies[proxy] = False
+                    detected_ips[proxy] = "unknown"
+            elif len(row) >= 5:
+                # 旧格式兼容：类型,proxy:port,分数,China,International（默认非透明代理）
                 proxy_type = row[0].strip().lower()
                 proxy = row[1].strip()
                 try:
@@ -229,14 +348,17 @@ def load_proxies_from_file(file_path):
                     proxy_types[proxy] = proxy_type
                     china_support[proxy] = china
                     international_support[proxy] = international
+                    transparent_proxies[proxy] = False
+                    detected_ips[proxy] = "unknown"
                 except:
-                    # 如果解析失败，使用默认值
                     proxies[proxy] = 70
                     proxy_types[proxy] = "http"
                     china_support[proxy] = False
                     international_support[proxy] = False
+                    transparent_proxies[proxy] = False
+                    detected_ips[proxy] = "unknown"
             elif len(row) >= 3:
-                # 旧格式兼容：类型,proxy:port,分数（默认不支持任何范围）
+                # 更旧格式兼容：类型,proxy:port,分数（默认不支持任何范围，非透明代理）
                 proxy_type = row[0].strip().lower()
                 proxy = row[1].strip()
                 try:
@@ -245,13 +367,17 @@ def load_proxies_from_file(file_path):
                     proxy_types[proxy] = proxy_type
                     china_support[proxy] = False
                     international_support[proxy] = False
+                    transparent_proxies[proxy] = False
+                    detected_ips[proxy] = "unknown"
                 except:
                     proxies[proxy] = 70
                     proxy_types[proxy] = "http"
                     china_support[proxy] = False
                     international_support[proxy] = False
+                    transparent_proxies[proxy] = False
+                    detected_ips[proxy] = "unknown"
             elif len(row) >= 2:
-                # 更旧格式兼容：proxy:port,分数（默认HTTP类型）
+                # 最旧格式兼容：proxy:port,分数（默认HTTP类型，不支持任何范围，非透明代理）
                 proxy = row[0].strip()
                 try:
                     score = int(row[1])
@@ -259,16 +385,20 @@ def load_proxies_from_file(file_path):
                     proxy_types[proxy] = "http"
                     china_support[proxy] = False
                     international_support[proxy] = False
+                    transparent_proxies[proxy] = False
+                    detected_ips[proxy] = "unknown"
                 except:
                     proxies[proxy] = 70
                     proxy_types[proxy] = "http"
                     china_support[proxy] = False
                     international_support[proxy] = False
+                    transparent_proxies[proxy] = False
+                    detected_ips[proxy] = "unknown"
     
-    return proxies, proxy_types, china_support, international_support
+    return proxies, proxy_types, china_support, international_support, transparent_proxies, detected_ips
 
-def save_valid_proxies(proxies, proxy_types, china_support, international_support, file_path):
-    """保存有效代理到CSV文件（带类型、分数和支持范围）"""
+def save_valid_proxies(proxies, proxy_types, china_support, international_support, transparent_proxies, detected_ips, file_path):
+    """保存有效代理到CSV文件（带类型、分数、支持范围和透明代理信息）"""
     with open(file_path, 'w', encoding="utf-8", newline='') as file:
         writer = csv.writer(file)
         for proxy, score in proxies.items():
@@ -276,16 +406,21 @@ def save_valid_proxies(proxies, proxy_types, china_support, international_suppor
                 proxy_type = proxy_types.get(proxy, "http")
                 china = china_support.get(proxy, False)
                 international = international_support.get(proxy, False)
-                writer.writerow([proxy_type, proxy, score, china, international])
+                transparent = transparent_proxies.get(proxy, False)
+                detected_ip = detected_ips.get(proxy, "unknown")
+                writer.writerow([proxy_type, proxy, score, china, international, transparent, detected_ip])
 
 def update_proxy_scores(file_path):
     """更新代理分数文件，移除0分代理"""
-    proxies, proxy_types, china_support, international_support = load_proxies_from_file(file_path)
+    proxies, proxy_types, china_support, international_support, transparent_proxies, detected_ips = load_proxies_from_file(file_path)
     valid_proxies = {k: v for k, v in proxies.items() if v > 0}
     valid_types = {k: v for k, v in proxy_types.items() if k in valid_proxies}
     valid_china = {k: v for k, v in china_support.items() if k in valid_proxies}
     valid_international = {k: v for k, v in international_support.items() if k in valid_proxies}
-    save_valid_proxies(valid_proxies, valid_types, valid_china, valid_international, file_path)
+    valid_transparent = {k: v for k, v in transparent_proxies.items() if k in valid_proxies}
+    valid_detected_ips = {k: v for k, v in detected_ips.items() if k in valid_proxies}
+    
+    save_valid_proxies(valid_proxies, valid_types, valid_china, valid_international, valid_transparent, valid_detected_ips, file_path)
     return len(proxies) - len(valid_proxies)
 
 def filter_proxies(all_proxies):
@@ -317,49 +452,55 @@ def filter_proxies(all_proxies):
     return new_proxies
 
 def validate_new_proxies(new_proxies, proxy_type="auto"):
-    """验证新代理（支持国内外）"""
+    """验证新代理（支持国内外和透明代理检测）"""
     if not new_proxies:
         print("没有代理需要验证")
         return
 
     original_count = len(new_proxies)
-    print(f"共加载 {original_count} 个新代理，使用{proxy_type}类型开始双重测试...")
+    print(f"共加载 {original_count} 个新代理，使用{proxy_type}类型开始国内外双重测试...")
+    print("启用透明代理检测")
     
     new_proxies_dict = {proxy: 0 for proxy in new_proxies}
     new_types_dict = {proxy: proxy_type for proxy in new_proxies}
     
-    updated_proxies, updated_types, updated_china, updated_international = check_proxies_batch(
+    updated_proxies, updated_types, updated_china, updated_international, updated_transparent, updated_detected_ips = check_proxies_batch(
         new_proxies_dict, new_types_dict, MAX_WORKERS, check_type="new"
     )
     
     # 合并到现有代理池
-    existing_proxies, existing_types, existing_china, existing_international = load_proxies_from_file(OUTPUT_FILE)
+    existing_proxies, existing_types, existing_china, existing_international, existing_transparent, existing_detected_ips = load_proxies_from_file(OUTPUT_FILE)
     for proxy, score in updated_proxies.items():
         if proxy not in existing_proxies or existing_proxies[proxy] < score:
             existing_proxies[proxy] = score
             existing_types[proxy] = updated_types[proxy]
             existing_china[proxy] = updated_china[proxy]
             existing_international[proxy] = updated_international[proxy]
+            existing_transparent[proxy] = updated_transparent[proxy]
+            existing_detected_ips[proxy] = updated_detected_ips[proxy]
 
-    save_valid_proxies(existing_proxies, existing_types, existing_china, existing_international, OUTPUT_FILE)
+    save_valid_proxies(existing_proxies, existing_types, existing_china, existing_international, existing_transparent, existing_detected_ips, OUTPUT_FILE)
     
     # 统计结果
     success_count = sum(1 for score in updated_proxies.values() if score == 98)
     china_only = sum(1 for proxy in updated_proxies if updated_china[proxy] and not updated_international[proxy])
     intl_only = sum(1 for proxy in updated_proxies if not updated_china[proxy] and updated_international[proxy])
     both_support = sum(1 for proxy in updated_proxies if updated_china[proxy] and updated_international[proxy])
+    transparent_count = sum(1 for proxy in updated_proxies if updated_transparent[proxy])
     
     print(f"\n✅ 验证完成!")
     print(f"成功代理: {success_count}/{original_count}")
     print(f"仅支持国内: {china_only} | 仅支持国际: {intl_only} | 双支持: {both_support}")
+    print(f"⚠️  透明代理: {transparent_count} 个")
     print(f"代理池已更新至: {OUTPUT_FILE}")
 
 def validate_existing_proxies():
-    """验证已有代理池中的代理（支持国内外）"""
+    """验证已有代理池中的代理（支持国内外和透明代理检测）"""
     print(f"开始验证已有代理池，文件：{OUTPUT_FILE}...")
+    print("🔍 启用透明代理检测")
     
-    # 加载代理池（不加载旧的支持范围，以新验证结果为准）
-    all_proxies, proxy_types, _, _ = load_proxies_from_file(OUTPUT_FILE)
+    # 加载代理池（不加载旧的支持范围和透明代理信息，以新验证结果为准）
+    all_proxies, proxy_types, _, _, _, _ = load_proxies_from_file(OUTPUT_FILE)
     
     if not all_proxies:
         print("没有代理需要验证")
@@ -367,8 +508,8 @@ def validate_existing_proxies():
 
     print(f"共加载 {len(all_proxies)} 个代理，开始双重测试...")
     
-    # 从代理池中获取当前分数和类型（不获取旧的支持范围）
-    updated_proxies, updated_types, updated_china, updated_international = check_proxies_batch(
+    # 从代理池中获取当前分数和类型（不获取旧的支持范围和透明代理信息）
+    updated_proxies, updated_types, updated_china, updated_international, updated_transparent, updated_detected_ips = check_proxies_batch(
         all_proxies, proxy_types, MAX_WORKERS, "existing"
     )
     
@@ -378,21 +519,23 @@ def validate_existing_proxies():
         proxy_types[proxy] = updated_types[proxy]
     
     # 保存更新后的代理池
-    save_valid_proxies(all_proxies, proxy_types, updated_china, updated_international, OUTPUT_FILE)
+    save_valid_proxies(all_proxies, proxy_types, updated_china, updated_international, updated_transparent, updated_detected_ips, OUTPUT_FILE)
     
     # 清理0分代理
     removed_count = update_proxy_scores(OUTPUT_FILE)
     
     # 最终统计
-    final_proxies, _, final_china, final_international = load_proxies_from_file(OUTPUT_FILE)
+    final_proxies, _, final_china, final_international, final_transparent, _ = load_proxies_from_file(OUTPUT_FILE)
     final_count = len(final_proxies)
     
     china_only = sum(1 for proxy in final_proxies if final_china[proxy] and not final_international[proxy])
     intl_only = sum(1 for proxy in final_proxies if not final_china[proxy] and final_international[proxy])
     both_support = sum(1 for proxy in final_proxies if final_china[proxy] and final_international[proxy])
+    transparent_count = sum(1 for proxy in final_proxies if final_transparent[proxy])
 
     print(f"\n验证完成! 剩余有效代理: {final_count}/{len(all_proxies)}")
     print(f"仅支持国内: {china_only} | 仅支持国际: {intl_only} | 双支持: {both_support}")
+    print(f"⚠️  透明代理: {transparent_count} 个")
     print(f"已移除 {removed_count} 个无效代理")
 
 def main(scraper_choice):
