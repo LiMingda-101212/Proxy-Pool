@@ -379,7 +379,7 @@ def load_proxies_from_file(file_path):
 
 def save_valid_proxies(proxies, proxy_types, china_support, international_support, transparent_proxies, detected_ips, browser_valid_status, browser_check_dates, file_path):
     """保存有效代理到CSV文件（带类型、分数、支持范围和透明代理信息）"""
-    os.makedirs(os.path.dirname(file_path), exist_ok=True)
+    # os.makedirs(os.path.dirname(file_path), exist_ok=True)
 
     with open(file_path, 'w', encoding="utf-8", newline='') as file:
         writer = csv.writer(file)
